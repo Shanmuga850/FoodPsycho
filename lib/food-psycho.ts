@@ -51,17 +51,17 @@ export const DEFAULT_DATA: FoodPsychoData = {
   branches: [
     {
       id: "b1",
-      branch_name: "T. Nagar",
-      address: "12 Ranganathan Street, T. Nagar, Chennai 600017",
-      map_link: "https://maps.google.com/?q=T+Nagar+Chennai",
-      phone: "+919000000001",
+      branch_name: "Satyanagar",
+      address: "Anuppanadi, Madurai 625009",
+      map_link: "https://www.google.com/maps/place//@9.8969386,78.1482476,19z?entry=ttu&g_ep=EgoyMDI2MDkxMy4wIKXMDSoASAFQAw%3D%3D",
+      phone: "+918838213898",
     },
     {
       id: "b2",
-      branch_name: "Anna Nagar",
-      address: "45 2nd Avenue, Anna Nagar, Chennai 600040",
-      map_link: "https://maps.google.com/?q=Anna+Nagar+Chennai",
-      phone: "+919000000002",
+      branch_name: "BBBBBBBBBBB",
+      address: "Cache",
+      map_link: "cache",
+      phone: "+919000000000",
     },
   ],
   links: [
@@ -74,7 +74,7 @@ export const DEFAULT_DATA: FoodPsychoData = {
     email: "hello@foodpsycho.in",
   },
   founder: {
-    image: "/founder.png",
+    image: "/founder.jpg",
     about_text:
       "Shanmugavel M started FOOD PSYCHO from a single home kitchen with one belief: food made fresh, every single day, tastes different. What began as weekend cooking for friends grew into a small chain of neighbourhood kitchens serving the city he loves.",
     philosophy_text:
@@ -101,7 +101,7 @@ function mergeDefaults(parsed: Partial<FoodPsychoData>): FoodPsychoData {
 
 /** Reads FOOD PSYCHO data from the database via the API route. */
 export async function fetchData(): Promise<FoodPsychoData> {
-  const res = await fetch("/api/data", { cache: "no-store" })
+  const res = await fetch(`/api/data?t=${Date.now()}`, { cache: "no-store" })
   const json = await res.json()
   return mergeDefaults(json && typeof json === "object" ? json : {})
 }
