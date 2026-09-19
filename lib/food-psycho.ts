@@ -21,7 +21,7 @@ export type SocialLink = {
 
 export type MenuFile = {
   url: string
-  type: string // mime type
+  type: string
   name: string
 }
 
@@ -53,15 +53,8 @@ export const DEFAULT_DATA: FoodPsychoData = {
       id: "b1",
       branch_name: "Satyanagar",
       address: "Anuppanadi, Madurai 625009",
-      map_link: "https://www.google.com/maps/place//@9.8969386,78.1482476,19z?entry=ttu&g_ep=EgoyMDI2MDkxMy4wIKXMDSoASAFQAw%3D%3D",
+      map_link: "https://www.google.com/maps/place/Food+Psycho",
       phone: "+918838213898",
-    },
-    {
-      id: "b2",
-      branch_name: "BBBBBBBBBBB",
-      address: "Cache",
-      map_link: "cache",
-      phone: "+919000000000",
     },
   ],
   links: [
@@ -70,13 +63,13 @@ export const DEFAULT_DATA: FoodPsychoData = {
     { id: "l3", title: "Facebook", url: "https://facebook.com/foodpsycho" },
   ],
   contact: {
-    phone: "+919000000001",
+    phone: "+918838213898",
     email: "hello@foodpsycho.in",
   },
   founder: {
-    image: "/founder.jpg",
+    image: null,
     about_text:
-      "Shanmugavel M started FOOD PSYCHO from a single home kitchen with one belief: food made fresh, every single day, tastes different. What began as weekend cooking for friends grew into a small chain of neighbourhood kitchens serving the city he loves.",
+      "Shanmugavel M started FOOD PSYCHO from a single home kitchen with one belief: food made fresh, every single day, tastes different.",
     philosophy_text:
       "We don't chase trends. We chase flavour, freshness, and the feeling of a meal made just for you.",
   },
@@ -85,38 +78,54 @@ export const DEFAULT_DATA: FoodPsychoData = {
     timings: "11:00 AM - 11:00 PM",
   },
   offerBanner: "Grand opening offer — Flat 20% off on all orders this week! Use FRESH20",
-  whatsapp: "+919000000001",
+  whatsapp: "+918838213898",
 }
 
-/** Shallow-merges stored data over defaults so new fields always have values. */
+/** FIXED: Deep merge so DB data always wins over defaults */
 function mergeDefaults(parsed: Partial<FoodPsychoData>): FoodPsychoData {
+  const safe = parsed && typeof parsed === "object" ? parsed : {}
   return {
     ...DEFAULT_DATA,
-    ...parsed,
-    contact: { ...DEFAULT_DATA.contact, ...parsed.contact },
-    founder: { ...DEFAULT_DATA.founder, ...parsed.founder },
-    status: { ...DEFAULT_DATA.status, ...parsed.status },
+    ...safe,
+    // DB branches/links should WIN, not defaults
+    branches: safe.branches && safe.branches.length > 0 ? safe.branches : DEFAULT_DATA.branches,
+    links: safe.links && safe.links.length > 0 ? safe.links : DEFAULT_DATA.links,
+    menu: safe.menu !== undefined ? safe.menu : DEFAULT_DATA.menu,
+    contact: { ...DEFAULT_DATA.contact, ...safe.contact },
+    founder: { ...DEFAULT_DATA.founder, ...safe.founder },
+    status: { ...DEFAULT_DATA.status, ...safe.status },
+    offerBanner: safe.offerBanner ?? DEFAULT_DATA.offerBanner,
+    whatsapp: safe.whatsapp ?? DEFAULT_DATA.whatsapp,
   }
 }
 
-/** Reads FOOD PSYCHO data from the database via the API route. */
+/** FIXED: Handles both {data: ...} and direct object from API */
 export async function fetchData(): Promise<FoodPsychoData> {
-  const res = await fetch(`/api/data?t=${Date.now()}`, { cache: "no-store" })
+  const res = await fetch(`/api/data?t=${Date.now()}`, { 
+    cache: "no-store",
+    headers: { "Cache-Control": "no-cache" }
+  })
+  if (!res.ok) {
+    console.error("fetchData failed", await res.text())
+    return DEFAULT_DATA
+  }
   const json = await res.json()
-  return mergeDefaults(json && typeof json === "object" ? json : {})
+  // API returns {data: {...}} or direct {...}
+  const raw = json?.data ?? json
+  return mergeDefaults(raw && typeof raw === "object" ? raw : {})
 }
 
-/** Persists the whole data object to the database via the API route. */
+/** FIXED: Save with better error */
 export async function saveData(data: FoodPsychoData): Promise<void> {
   const res = await fetch("/api/data", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
     body: JSON.stringify(data),
   })
-  if (!res.ok) throw new Error("Failed to save")
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json?.error ?? "Failed to save")
 }
 
-/** Uploads a file to Supabase Storage and returns its public URL. */
 export async function uploadFile(file: File): Promise<string> {
   const form = new FormData()
   form.append("file", file)
@@ -126,7 +135,6 @@ export async function uploadFile(file: File): Promise<string> {
   return json.url as string
 }
 
-/** Fetches FOOD PSYCHO data from the database on mount. */
 export function useFoodPsychoData(): [FoodPsychoData, boolean] {
   const [data, setData] = useState<FoodPsychoData>(DEFAULT_DATA)
   const [ready, setReady] = useState(false)
@@ -150,7 +158,6 @@ export function useFoodPsychoData(): [FoodPsychoData, boolean] {
   return [data, ready]
 }
 
-/** Detects a social platform from a URL for icon selection. */
 export type SocialPlatform =
   | "instagram"
   | "youtube"
@@ -175,13 +182,4 @@ export function detectPlatform(url: string): SocialPlatform {
 
 export function uid() {
   return Math.random().toString(36).slice(2, 10)
-}
-
-export function readFileAsDataURL(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
 }

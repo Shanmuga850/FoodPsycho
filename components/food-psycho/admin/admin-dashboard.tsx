@@ -28,17 +28,18 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     let active = true
     fetchData()
-      .then((d) => {
+     .then((d) => {
         if (!active) return
         setDraft(d)
         setLoading(false)
       })
-      .catch(() => {
+     .catch(() => {
         if (active) setLoading(false)
       })
     return () => {
@@ -47,60 +48,101 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     }
   }, [])
 
+  // ✅ FIX 1: Functional update to avoid stale state
   function update<K extends keyof FoodPsychoData>(key: K, value: FoodPsychoData[K]) {
-    setDraft((d) => ({ ...d, [key]: value }))
+    setDraft((prev) => ({...prev, [key]: value }))
   }
 
   async function handleSave() {
     setSaving(true)
     try {
+      console.log("Saving data:", draft) // debug
       await saveData(draft)
       setSaved(true)
       if (savedTimer.current) clearTimeout(savedTimer.current)
       savedTimer.current = setTimeout(() => setSaved(false), 2500)
+    } catch (e) {
+      alert("Save failed: " + (e as any).message)
+      console.error(e)
     } finally {
       setSaving(false)
     }
   }
 
   async function handleMenuUpload(file: File) {
-    const url = await uploadFile(file)
-    update("menu", { url, type: file.type, name: file.name })
+    setUploading(true)
+    try {
+      const url = await uploadFile(file)
+      // ✅ FIX 2: Functional update
+      setDraft((prev) => ({...prev, menu: { url, type: file.type, name: file.name } }))
+    } catch (e) {
+      alert("Upload failed: " + (e as any).message)
+    } finally {
+      setUploading(false)
+    }
   }
 
   async function handleFounderImage(file: File) {
-    const url = await uploadFile(file)
-    update("founder", { ...draft.founder, image: url })
+    setUploading(true)
+    try {
+      const url = await uploadFile(file)
+      // ✅ FIX 3: Functional update - no stale draft.founder
+      setDraft((prev) => ({...prev, founder: {...prev.founder, image: url } }))
+    } catch (e) {
+      alert("Upload failed: " + (e as any).message)
+    } finally {
+      setUploading(false)
+    }
   }
 
-  // branches
+  // branches - ALL FIXED WITH FUNCTIONAL UPDATES
   function addBranch() {
-    if (draft.branches.length >= 5) return
-    update("branches", [
-      ...draft.branches,
-      { id: uid(), branch_name: "", address: "", map_link: "", phone: "" },
-    ])
-  }
-  function updateBranch(id: string, patch: Partial<Branch>) {
-    update(
-      "branches",
-      draft.branches.map((b) => (b.id === id ? { ...b, ...patch } : b)),
-    )
-  }
-  function removeBranch(id: string) {
-    update("branches", draft.branches.filter((b) => b.id !== id))
+    setDraft((prev) => {
+      if (prev.branches.length >= 5) return prev
+      return {
+       ...prev,
+        branches: [
+         ...prev.branches,
+          { id: uid(), branch_name: "", address: "", map_link: "", phone: "" },
+        ],
+      }
+    })
   }
 
-  // links
+  function updateBranch(id: string, patch: Partial<Branch>) {
+    setDraft((prev) => ({
+     ...prev,
+      branches: prev.branches.map((b) => (b.id === id? {...b,...patch } : b)),
+    }))
+  }
+
+  function removeBranch(id: string) {
+    setDraft((prev) => ({
+     ...prev,
+      branches: prev.branches.filter((b) => b.id!== id),
+    }))
+  }
+
+  // links - ALL FIXED
   function addLink() {
-    if (draft.links.length >= 5) return
-    update("links", [...draft.links, { id: uid(), title: "", url: "" }])
+    setDraft((prev) => {
+      if (prev.links.length >= 5) return prev
+      return {...prev, links: [...prev.links, { id: uid(), title: "", url: "" }] }
+    })
   }
+
   function updateLink(id: string, patch: Partial<SocialLink>) {
-    update("links", draft.links.map((l) => (l.id === id ? { ...l, ...patch } : l)))
+    setDraft((prev) => ({
+     ...prev,
+      links: prev.links.map((l) => (l.id === id? {...l,...patch } : l)),
+    }))
   }
+
   function removeLink(id: string) {
-    update("links", draft.links.filter((l) => l.id !== id))
+    setDraft((prev) => ({
+     ...prev,
+      links: prev.links.filter((l) => l.id!== id),
+    }))
   }
 
   if (loading) {
@@ -120,7 +162,7 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
           <div>
             <h1 className="font-playfair text-xl font-black text-black">FOOD PSYCHO Admin</h1>
-            <p className="font-montserrat text-xs text-black/50">Manage your public page</p>
+            <p className="font-montserrat text-xs text-black/50">Manage your public page {uploading && "(Uploading...)"}</p>
           </div>
           <div className="flex items-center gap-2">
             <Link
@@ -160,27 +202,27 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
               role="switch"
               aria-checked={draft.status.isOpen}
               onClick={() =>
-                update("status", { ...draft.status, isOpen: !draft.status.isOpen })
+                setDraft((prev) => ({...prev, status: {...prev.status, isOpen:!prev.status.isOpen } }))
               }
               className={`relative h-7 w-12 rounded-full transition ${
-                draft.status.isOpen ? "bg-green-500" : "bg-black/25"
+                draft.status.isOpen? "bg-green-500" : "bg-black/25"
               }`}
             >
               <span
                 className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-all ${
-                  draft.status.isOpen ? "left-6" : "left-1"
+                  draft.status.isOpen? "left-6" : "left-1"
                 }`}
               />
             </button>
             <span className="font-montserrat text-sm font-semibold text-black">
-              {draft.status.isOpen ? "Open Now" : "Closed"}
+              {draft.status.isOpen? "Open Now" : "Closed"}
             </span>
           </div>
           <Field label="Timings">
             <input
               className={inputClass}
               value={draft.status.timings}
-              onChange={(e) => update("status", { ...draft.status, timings: e.target.value })}
+              onChange={(e) => setDraft((prev) => ({...prev, status: {...prev.status, timings: e.target.value } }))}
               placeholder="11:00 AM - 11:00 PM"
             />
           </Field>
@@ -190,22 +232,23 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-black/25 bg-[#F9F6F0] px-4 py-8 text-center transition hover:border-[#FF6B2B]">
             <UploadCloud className="h-6 w-6 text-[#FF6B2B]" />
             <span className="font-montserrat text-sm font-semibold text-black">
-              Upload menu (image or PDF)
+              {uploading? "Uploading..." : "Upload menu (image or PDF)"}
             </span>
             <span className="font-montserrat text-xs text-black/50">
-              {draft.menu?.name ?? "No file uploaded yet"}
+              {draft.menu?.name?? "No file uploaded yet"}
             </span>
             <input
               type="file"
               accept="image/*,application/pdf"
               className="hidden"
+              disabled={uploading}
               onChange={(e) => {
                 const f = e.target.files?.[0]
                 if (f) void handleMenuUpload(f)
               }}
             />
           </label>
-          {draft.menu?.url ? (
+          {draft.menu?.url? (
             <button
               type="button"
               onClick={() => update("menu", null)}
@@ -266,7 +309,7 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
               </div>
             </div>
           ))}
-          {draft.branches.length < 5 ? (
+          {draft.branches.length < 5? (
             <button
               type="button"
               onClick={addBranch}
@@ -312,7 +355,7 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
               </button>
             </div>
           ))}
-          {draft.links.length < 5 ? (
+          {draft.links.length < 5? (
             <button
               type="button"
               onClick={addLink}
@@ -330,14 +373,14 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             <input
               className={inputClass}
               value={draft.contact.phone}
-              onChange={(e) => update("contact", { ...draft.contact, phone: e.target.value })}
+              onChange={(e) => setDraft((prev) => ({...prev, contact: {...prev.contact, phone: e.target.value } }))}
             />
           </Field>
           <Field label="Email">
             <input
               className={inputClass}
               value={draft.contact.email}
-              onChange={(e) => update("contact", { ...draft.contact, email: e.target.value })}
+              onChange={(e) => setDraft((prev) => ({...prev, contact: {...prev.contact, email: e.target.value } }))}
             />
           </Field>
           <Field label="WhatsApp number" hint="Used for the Order on WhatsApp button.">
@@ -352,7 +395,7 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
         <AdminCard title="Founder">
           <div className="flex items-center gap-4">
-            {draft.founder.image ? (
+            {draft.founder.image? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={draft.founder.image}
@@ -363,11 +406,12 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
               <div className="h-16 w-16 rounded-full bg-black/10" />
             )}
             <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-black/15 px-3 py-2 font-montserrat text-sm font-semibold text-black transition hover:bg-black/5">
-              <UploadCloud className="h-4 w-4" /> Upload photo
+              <UploadCloud className="h-4 w-4" /> {uploading? "Uploading..." : "Upload photo"}
               <input
                 type="file"
                 accept="image/*"
                 className="hidden"
+                disabled={uploading}
                 onChange={(e) => {
                   const f = e.target.files?.[0]
                   if (f) void handleFounderImage(f)
@@ -380,7 +424,7 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
               className={`${inputClass} min-h-[100px] resize-y`}
               value={draft.founder.about_text}
               onChange={(e) =>
-                update("founder", { ...draft.founder, about_text: e.target.value })
+                setDraft((prev) => ({...prev, founder: {...prev.founder, about_text: e.target.value } }))
               }
             />
           </Field>
@@ -389,7 +433,7 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
               className={`${inputClass} min-h-[70px] resize-y`}
               value={draft.founder.philosophy_text}
               onChange={(e) =>
-                update("founder", { ...draft.founder, philosophy_text: e.target.value })
+                setDraft((prev) => ({...prev, founder: {...prev.founder, philosophy_text: e.target.value } }))
               }
             />
           </Field>
@@ -400,7 +444,7 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-6 py-4">
           <span
             className={`inline-flex items-center gap-1.5 font-montserrat text-sm font-semibold text-green-600 transition-opacity ${
-              saved ? "opacity-100" : "opacity-0"
+              saved? "opacity-100" : "opacity-0"
             }`}
           >
             <Check className="h-4 w-4" /> Changes saved
@@ -408,10 +452,10 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || uploading}
             className="inline-flex items-center gap-2 rounded-md bg-[#FF6B2B] px-6 py-2.5 font-montserrat text-sm font-bold text-white shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <Save className="h-4 w-4" /> {saving ? "Saving…" : "Save Changes"}
+            <Save className="h-4 w-4" /> {saving? "Saving…" : uploading? "Uploading..." : "Save Changes"}
           </button>
         </div>
       </div>
