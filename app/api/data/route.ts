@@ -22,8 +22,9 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const supabase = getAdmin()
   const body = await req.json()
+  // FIXED: Removed updated_at - your table doesn't have it
   const { error } = await supabase.from("foodpsycho_data").upsert(
-    { id: 1, data: body, updated_at: new Date().toISOString() },
+    { id: 1, data: body },
     { onConflict: "id" }
   )
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
